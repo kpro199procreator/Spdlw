@@ -88,8 +88,8 @@ dependencies {
     // Image Loading
     implementation("io.coil-kt:coil-compose:2.5.0")
     
-    // FFmpeg - FFmpeg Kit (reemplazo de mobile-ffmpeg)
-    implementation("com.arthenica:ffmpeg-kit-full:6.0-2")
+    // FFmpeg Kit - Versión audio (más ligera, solo codecs de audio)
+    implementation("com.arthenica:ffmpeg-kit-audio:5.1.LTS")
     
     // YouTube extractor
     implementation("com.github.HaarigerHarald:android-youtubeExtractor:master-SNAPSHOT")
