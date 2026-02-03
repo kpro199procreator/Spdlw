@@ -1,6 +1,7 @@
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
+    id("kotlin-parcelize")
 }
 
 android {
@@ -87,7 +88,13 @@ dependencies {
     // Image Loading
     implementation("io.coil-kt:coil-compose:2.5.0")
     
-    // Web Scraping
+    // No usamos librerías de FFmpeg - usaremos el binario directamente
+    // Los binarios de ffmpeg y yt-dlp se incluirán en assets/
+    
+    // YouTube extractor - Comentado temporalmente (requiere JitPack)
+    // implementation("com.github.HaarigerHarald:android-youtubeExtractor:master-SNAPSHOT")
+    
+    // Jsoup for web scraping
     implementation("org.jsoup:jsoup:1.17.1")
     
     // Room Database
@@ -97,7 +104,7 @@ dependencies {
     // DataStore
     implementation("androidx.datastore:datastore-preferences:1.0.0")
     
-    // WorkManager
+    // WorkManager for background downloads
     implementation("androidx.work:work-runtime-ktx:2.9.0")
     
     // Permissions
