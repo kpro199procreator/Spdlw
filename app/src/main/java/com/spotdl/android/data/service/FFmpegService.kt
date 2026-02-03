@@ -2,8 +2,9 @@ package com.spotdl.android.data.service
 
 import android.content.Context
 import android.util.Log
-import com.arthenica.mobileffmpeg.Config
-import com.arthenica.mobileffmpeg.FFmpeg
+import com.arthenica.ffmpegkit.FFmpegKit
+import com.arthenica.ffmpegkit.FFmpegKitConfig
+import com.arthenica.ffmpegkit.ReturnCode
 import com.spotdl.android.data.model.AudioFormat
 import com.spotdl.android.data.model.AudioQuality
 import com.spotdl.android.data.model.Song
@@ -43,29 +44,35 @@ class FFmpegService(private val context: Context) {
             Log.d(TAG, "Comando FFmpeg: $command")
 
             // Configurar callback de progreso
-            Config.enableStatisticsCallback { statistics ->
+            var lastProgress = 0f
+            FFmpegKitConfig.enableStatisticsCallback { statistics ->
                 // Calcular progreso basado en el tiempo procesado
-                val progress = statistics.time / 1000f / 100f // Aproximación
-                onProgress(progress.coerceIn(0f, 1f))
+                val progress = (statistics.time / 100000f).coerceIn(0f, 1f)
+                if (progress > lastProgress) {
+                    lastProgress = progress
+                    onProgress(progress)
+                }
             }
 
             // Ejecutar FFmpeg
-            val returnCode = FFmpeg.execute(command)
+            val session = FFmpegKit.execute(command)
 
             // Resetear callback
-            Config.resetStatistics()
+            FFmpegKitConfig.enableStatisticsCallback(null)
 
-            when (returnCode) {
-                Config.RETURN_CODE_SUCCESS -> {
+            val returnCode = session.returnCode
+
+            when {
+                ReturnCode.isSuccess(returnCode) -> {
                     Log.d(TAG, "Conversión exitosa")
                     Result.success(outputFile)
                 }
-                Config.RETURN_CODE_CANCEL -> {
+                ReturnCode.isCancel(returnCode) -> {
                     Log.w(TAG, "Conversión cancelada")
                     Result.failure(Exception("Conversión cancelada"))
                 }
                 else -> {
-                    val error = Config.getLastCommandOutput()
+                    val error = session.output ?: "Error desconocido"
                     Log.e(TAG, "Error en conversión: $error")
                     Result.failure(Exception("Error en conversión: código $returnCode"))
                 }
@@ -158,10 +165,10 @@ class FFmpegService(private val context: Context) {
         
         try {
             val command = "-i ${file.absolutePath} -f ffmetadata -"
-            val returnCode = FFmpeg.execute(command)
+            val session = FFmpegKit.execute(command)
             
-            if (returnCode == Config.RETURN_CODE_SUCCESS) {
-                val output = Config.getLastCommandOutput()
+            if (ReturnCode.isSuccess(session.returnCode)) {
+                val output = session.output ?: ""
                 // Parsear metadatos del output
                 parseMetadataOutput(output, metadata)
             }
@@ -238,11 +245,14 @@ class FFmpegService(private val context: Context) {
             val command = commands.joinToString(" ")
             Log.d(TAG, "Comando metadata: $command")
 
-            val returnCode = FFmpeg.execute(command)
+            val session = FFmpegKit.execute(command)
 
-            when (returnCode) {
-                Config.RETURN_CODE_SUCCESS -> Result.success(outputFile)
-                else -> Result.failure(Exception("Error insertando metadatos: código $returnCode"))
+            when {
+                ReturnCode.isSuccess(session.returnCode) -> Result.success(outputFile)
+                else -> {
+                    val error = session.output ?: "Error desconocido"
+                    Result.failure(Exception("Error insertando metadatos: $error"))
+                }
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error insertando metadatos: ${e.message}", e)
@@ -275,9 +285,9 @@ class FFmpegService(private val context: Context) {
     suspend fun getAudioInfo(file: File): AudioInfo? = withContext(Dispatchers.IO) {
         try {
             val command = "-i ${file.absolutePath}"
-            FFmpeg.execute(command)
+            val session = FFmpegKit.execute(command)
             
-            val output = Config.getLastCommandOutput()
+            val output = session.output ?: ""
             parseAudioInfo(output)
         } catch (e: Exception) {
             Log.e(TAG, "Error obteniendo info de audio: ${e.message}", e)
