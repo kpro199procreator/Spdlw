@@ -2,9 +2,6 @@ package com.spotdl.android.data.service
 
 import android.content.Context
 import android.util.Log
-import com.arthenica.ffmpegkit.FFmpegKit
-import com.arthenica.ffmpegkit.FFmpegKitConfig
-import com.arthenica.ffmpegkit.ReturnCode
 import com.spotdl.android.data.model.AudioFormat
 import com.spotdl.android.data.model.AudioQuality
 import com.spotdl.android.data.model.Song
@@ -13,12 +10,21 @@ import kotlinx.coroutines.withContext
 import java.io.File
 
 /**
- * Servicio para conversión de audio usando FFmpeg
+ * Servicio para conversión de audio usando FFmpeg binario
  */
 class FFmpegService(private val context: Context) {
 
     companion object {
         private const val TAG = "FFmpegService"
+    }
+
+    private val binaryManager = BinaryManager(context)
+
+    /**
+     * Inicializa FFmpeg
+     */
+    suspend fun initialize(): Result<Unit> {
+        return binaryManager.initializeBinaries()
     }
 
     /**
@@ -43,38 +49,18 @@ class FFmpegService(private val context: Context) {
             
             Log.d(TAG, "Comando FFmpeg: $command")
 
-            // Configurar callback de progreso
-            var lastProgress = 0f
-            FFmpegKitConfig.enableStatisticsCallback { statistics ->
-                // Calcular progreso basado en el tiempo procesado
-                val progress = (statistics.time / 100000f).coerceIn(0f, 1f)
-                if (progress > lastProgress) {
-                    lastProgress = progress
-                    onProgress(progress)
-                }
-            }
-
             // Ejecutar FFmpeg
-            val session = FFmpegKit.execute(command)
-
-            // Resetear callback
-            FFmpegKitConfig.enableStatisticsCallback(null)
-
-            val returnCode = session.returnCode
+            val result = binaryManager.executeFFmpeg(command, onProgress)
 
             when {
-                ReturnCode.isSuccess(returnCode) -> {
+                result.isSuccess -> {
                     Log.d(TAG, "Conversión exitosa")
                     Result.success(outputFile)
                 }
-                ReturnCode.isCancel(returnCode) -> {
-                    Log.w(TAG, "Conversión cancelada")
-                    Result.failure(Exception("Conversión cancelada"))
-                }
                 else -> {
-                    val error = session.output ?: "Error desconocido"
+                    val error = result.exceptionOrNull()?.message ?: "Error desconocido"
                     Log.e(TAG, "Error en conversión: $error")
-                    Result.failure(Exception("Error en conversión: código $returnCode"))
+                    Result.failure(Exception("Error en conversión: $error"))
                 }
             }
         } catch (e: Exception) {
@@ -92,57 +78,42 @@ class FFmpegService(private val context: Context) {
         format: AudioFormat,
         quality: AudioQuality
     ): String {
-        val commands = mutableListOf<String>()
-        
-        // Input file
-        commands.add("-i")
-        commands.add(inputFile.absolutePath)
+        return buildString {
+            append("-i \"${inputFile.absolutePath}\"")
+            
+            // Configuración según formato
+            when (format) {
+                AudioFormat.MP3 -> {
+                    append(" -codec:a libmp3lame")
+                    append(" -b:a ${quality.bitrate}")
+                }
+                AudioFormat.M4A -> {
+                    append(" -codec:a aac")
+                    append(" -b:a ${quality.bitrate}")
+                }
+                AudioFormat.FLAC -> {
+                    append(" -codec:a flac")
+                    append(" -compression_level 8")
+                }
+                AudioFormat.WAV -> {
+                    append(" -codec:a pcm_s16le")
+                }
+                AudioFormat.OGG -> {
+                    append(" -codec:a libvorbis")
+                    append(" -q:a ${getOggQuality(quality)}")
+                }
+            }
 
-        // Configuración según formato
-        when (format) {
-            AudioFormat.MP3 -> {
-                commands.add("-codec:a")
-                commands.add("libmp3lame")
-                commands.add("-b:a")
-                commands.add(quality.bitrate)
-            }
-            AudioFormat.M4A -> {
-                commands.add("-codec:a")
-                commands.add("aac")
-                commands.add("-b:a")
-                commands.add(quality.bitrate)
-            }
-            AudioFormat.FLAC -> {
-                commands.add("-codec:a")
-                commands.add("flac")
-                commands.add("-compression_level")
-                commands.add("8")
-            }
-            AudioFormat.WAV -> {
-                commands.add("-codec:a")
-                commands.add("pcm_s16le")
-            }
-            AudioFormat.OGG -> {
-                commands.add("-codec:a")
-                commands.add("libvorbis")
-                commands.add("-q:a")
-                commands.add(getOggQuality(quality))
-            }
+            // Configuración de audio común
+            append(" -ar 44100") // Sample rate
+            append(" -ac 2") // Stereo
+
+            // Sobrescribir sin preguntar
+            append(" -y")
+
+            // Output file
+            append(" \"${outputFile.absolutePath}\"")
         }
-
-        // Configuración de audio común
-        commands.add("-ar")
-        commands.add("44100") // Sample rate
-        commands.add("-ac")
-        commands.add("2") // Stereo
-
-        // Sobrescribir sin preguntar
-        commands.add("-y")
-
-        // Output file
-        commands.add(outputFile.absolutePath)
-
-        return commands.joinToString(" ")
     }
 
     /**
@@ -158,28 +129,6 @@ class FFmpegService(private val context: Context) {
     }
 
     /**
-     * Extrae metadatos de un archivo de audio
-     */
-    suspend fun extractMetadata(file: File): Map<String, String> = withContext(Dispatchers.IO) {
-        val metadata = mutableMapOf<String, String>()
-        
-        try {
-            val command = "-i ${file.absolutePath} -f ffmetadata -"
-            val session = FFmpegKit.execute(command)
-            
-            if (ReturnCode.isSuccess(session.returnCode)) {
-                val output = session.output ?: ""
-                // Parsear metadatos del output
-                parseMetadataOutput(output, metadata)
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Error extrayendo metadatos: ${e.message}", e)
-        }
-        
-        metadata
-    }
-
-    /**
      * Inserta metadatos en un archivo de audio
      */
     suspend fun embedMetadata(
@@ -189,68 +138,55 @@ class FFmpegService(private val context: Context) {
         artworkFile: File? = null
     ): Result<File> = withContext(Dispatchers.IO) {
         try {
-            val commands = mutableListOf<String>()
-            
-            // Input file
-            commands.add("-i")
-            commands.add(inputFile.absolutePath)
+            val command = buildString {
+                append("-i \"${inputFile.absolutePath}\"")
 
-            // Artwork si está disponible
-            if (artworkFile != null && artworkFile.exists()) {
-                commands.add("-i")
-                commands.add(artworkFile.absolutePath)
+                // Artwork si está disponible
+                if (artworkFile != null && artworkFile.exists()) {
+                    append(" -i \"${artworkFile.absolutePath}\"")
+                }
+
+                // Copiar streams
+                append(" -c copy")
+
+                // Metadatos
+                append(" -metadata title=\"${song.title}\"")
+                append(" -metadata artist=\"${song.artist}\"")
+                
+                song.album?.let {
+                    append(" -metadata album=\"$it\"")
+                }
+                
+                song.year?.let {
+                    append(" -metadata date=\"$it\"")
+                }
+                
+                song.genre?.let {
+                    append(" -metadata genre=\"$it\"")
+                }
+
+                // Mapear artwork si existe
+                if (artworkFile != null && artworkFile.exists()) {
+                    append(" -map 0:0")
+                    append(" -map 1:0")
+                    append(" -id3v2_version 3")
+                }
+
+                // Sobrescribir
+                append(" -y")
+
+                // Output
+                append(" \"${outputFile.absolutePath}\"")
             }
 
-            // Copiar streams
-            commands.add("-c")
-            commands.add("copy")
-
-            // Metadatos
-            commands.add("-metadata")
-            commands.add("title=${song.title}")
-            commands.add("-metadata")
-            commands.add("artist=${song.artist}")
-            
-            song.album?.let {
-                commands.add("-metadata")
-                commands.add("album=$it")
-            }
-            
-            song.year?.let {
-                commands.add("-metadata")
-                commands.add("date=$it")
-            }
-            
-            song.genre?.let {
-                commands.add("-metadata")
-                commands.add("genre=$it")
-            }
-
-            // Mapear artwork si existe
-            if (artworkFile != null && artworkFile.exists()) {
-                commands.add("-map")
-                commands.add("0:0")
-                commands.add("-map")
-                commands.add("1:0")
-                commands.add("-id3v2_version")
-                commands.add("3")
-            }
-
-            // Sobrescribir
-            commands.add("-y")
-
-            // Output
-            commands.add(outputFile.absolutePath)
-
-            val command = commands.joinToString(" ")
             Log.d(TAG, "Comando metadata: $command")
 
-            val session = FFmpegKit.execute(command)
+            val result = binaryManager.executeFFmpeg(command)
 
             when {
-                ReturnCode.isSuccess(session.returnCode) -> Result.success(outputFile)
+                result.isSuccess -> Result.success(outputFile)
                 else -> {
-                    val error = session.output ?: "Error desconocido"
+                    val error = result.exceptionOrNull()?.message ?: "Error desconocido"
                     Result.failure(Exception("Error insertando metadatos: $error"))
                 }
             }
@@ -261,33 +197,14 @@ class FFmpegService(private val context: Context) {
     }
 
     /**
-     * Parsea la salida de metadatos de FFmpeg
-     */
-    private fun parseMetadataOutput(output: String, metadata: MutableMap<String, String>) {
-        val lines = output.split("\n")
-        for (line in lines) {
-            if (line.trim().startsWith("title") ||
-                line.trim().startsWith("artist") ||
-                line.trim().startsWith("album") ||
-                line.trim().startsWith("date")
-            ) {
-                val parts = line.split(":", limit = 2)
-                if (parts.size == 2) {
-                    metadata[parts[0].trim()] = parts[1].trim()
-                }
-            }
-        }
-    }
-
-    /**
      * Obtiene información del archivo de audio
      */
     suspend fun getAudioInfo(file: File): AudioInfo? = withContext(Dispatchers.IO) {
         try {
-            val command = "-i ${file.absolutePath}"
-            val session = FFmpegKit.execute(command)
+            val command = "-i \"${file.absolutePath}\""
+            val result = binaryManager.executeFFmpeg(command)
             
-            val output = session.output ?: ""
+            val output = result.getOrNull() ?: ""
             parseAudioInfo(output)
         } catch (e: Exception) {
             Log.e(TAG, "Error obteniendo info de audio: ${e.message}", e)
@@ -338,6 +255,13 @@ class FFmpegService(private val context: Context) {
         } catch (e: Exception) {
             return null
         }
+    }
+
+    /**
+     * Obtiene la versión de FFmpeg
+     */
+    suspend fun getVersion(): String? {
+        return binaryManager.getFFmpegVersion()
     }
 }
 

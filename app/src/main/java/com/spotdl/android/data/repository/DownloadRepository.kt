@@ -8,10 +8,13 @@ import com.spotdl.android.data.model.*
 import com.spotdl.android.data.service.FFmpegService
 import com.spotdl.android.data.service.SpotifyService
 import com.spotdl.android.data.service.YouTubeService
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.text.SimpleDateFormat
@@ -26,9 +29,19 @@ class DownloadRepository(private val context: Context) {
         private const val TAG = "DownloadRepository"
     }
 
+    private val repositoryScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
     private val youtubeService = YouTubeService(context)
     private val spotifyService = SpotifyService()
     private val ffmpegService = FFmpegService(context)
+
+    init {
+        // Inicializar binarios en segundo plano
+        repositoryScope.launch {
+            youtubeService.initialize()
+            ffmpegService.initialize()
+        }
+    }
 
     private val _downloads = MutableStateFlow<List<DownloadProgress>>(emptyList())
     val downloads: Flow<List<DownloadProgress>> = _downloads.asStateFlow()

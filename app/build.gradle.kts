@@ -52,6 +52,25 @@ android {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
+        // No comprimir binarios
+        jniLibs {
+            useLegacyPackaging = true
+        }
+    }
+    
+    // Filtros ABI - solo ARM64 para reducir tamaño
+    defaultConfig {
+        // ... (configuración existente)
+        
+        ndk {
+            abiFilters.clear()
+            abiFilters.addAll(listOf("arm64-v8a"))
+        }
+    }
+    
+    // No comprimir archivos binarios en assets
+    androidResources {
+        noCompress += listOf("ffmpeg", "yt-dlp", "python", "python3", "python3.11")
     }
 }
 
@@ -88,8 +107,8 @@ dependencies {
     // Image Loading
     implementation("io.coil-kt:coil-compose:2.5.0")
     
-    // FFmpeg Kit - Versión audio (más ligera, solo codecs de audio)
-    implementation("com.arthenica:ffmpeg-kit-audio:5.1.LTS")
+    // No usamos librerías de FFmpeg - usaremos el binario directamente
+    // Los binarios de ffmpeg y yt-dlp se incluirán en assets/
     
     // YouTube extractor
     implementation("com.github.HaarigerHarald:android-youtubeExtractor:master-SNAPSHOT")

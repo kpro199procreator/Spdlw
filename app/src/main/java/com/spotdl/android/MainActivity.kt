@@ -15,14 +15,16 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
-import com.google.accompanist.permissions.rememberMultiplePermissionsState
 import com.spotdl.android.ui.screens.MainScreen
+import com.spotdl.android.ui.screens.SetupScreen
 import com.spotdl.android.ui.theme.SpotDLTheme
 import com.spotdl.android.ui.viewmodel.MainViewModel
+import com.spotdl.android.ui.viewmodel.SetupViewModel
 
 class MainActivity : ComponentActivity() {
 
-    private val viewModel: MainViewModel by viewModels()
+    private val mainViewModel: MainViewModel by viewModels()
+    private val setupViewModel: SetupViewModel by viewModels()
 
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -48,7 +50,10 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    MainScreen(viewModel = viewModel)
+                    AppNavigation(
+                        mainViewModel = mainViewModel,
+                        setupViewModel = setupViewModel
+                    )
                 }
             }
         }
@@ -110,9 +115,30 @@ class MainActivity : ComponentActivity() {
                 if (sharedText.contains("spotify.com") || 
                     sharedText.contains("youtube.com") || 
                     sharedText.contains("youtu.be")) {
-                    viewModel.processSharedUrl(sharedText)
+                    mainViewModel.processSharedUrl(sharedText)
                 }
             }
         }
+    }
+}
+
+@Composable
+fun AppNavigation(
+    mainViewModel: MainViewModel,
+    setupViewModel: SetupViewModel
+) {
+    // Verificar si el setup ya fue completado
+    var showSetup by remember { mutableStateOf(!setupViewModel.isSetupCompleted()) }
+
+    if (showSetup) {
+        SetupScreen(
+            viewModel = setupViewModel,
+            onSetupComplete = {
+                setupViewModel.markSetupCompleted()
+                showSetup = false
+            }
+        )
+    } else {
+        MainScreen(viewModel = mainViewModel)
     }
 }
