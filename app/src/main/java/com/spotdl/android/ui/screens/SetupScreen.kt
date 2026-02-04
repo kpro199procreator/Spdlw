@@ -23,6 +23,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.spotdl.android.data.model.*
 import com.spotdl.android.ui.viewmodel.SetupViewModel
+import com.spotdl.android.ui.viewmodel.SetupState
+import com.spotdl.android.ui.viewmodel.InstallMode
 
 @Composable
 fun SetupScreen(
@@ -569,7 +571,7 @@ fun InstallingScreen(
             contentAlignment = Alignment.Center
         ) {
             CircularProgressIndicator(
-                progress = { overallProgress },
+                progress = overallProgress,
                 modifier = Modifier.fillMaxSize(),
                 strokeWidth = 12.dp
             )
@@ -646,7 +648,7 @@ fun BinaryProgressItem(state: BinaryState) {
                 Spacer(modifier = Modifier.height(8.dp))
                 
                 LinearProgressIndicator(
-                    progress = { state.downloadProgress },
+                    progress = state.downloadProgress,
                     modifier = Modifier.fillMaxWidth()
                 )
                 

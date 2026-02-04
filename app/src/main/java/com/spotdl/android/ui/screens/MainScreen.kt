@@ -415,7 +415,7 @@ fun DownloadCard(
             if (download.status == DownloadStatus.DOWNLOADING || 
                 download.status == DownloadStatus.PROCESSING) {
                 LinearProgressIndicator(
-                    progress = { download.progress },
+                    progress = download.progress,
                     modifier = Modifier.fillMaxWidth()
                 )
                 
