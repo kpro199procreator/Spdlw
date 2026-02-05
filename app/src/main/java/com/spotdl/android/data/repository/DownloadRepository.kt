@@ -138,7 +138,9 @@ class DownloadRepository(private val context: Context) {
                         errorMessage = downloadResult.exceptionOrNull()?.message
                     )
                 )
-                return@withContext downloadResult
+                return@withContext Result.failure(
+                    downloadResult.exceptionOrNull() ?: Exception("Error desconocido")
+                )
             }
 
             // Paso 3: Descargar artwork si está disponible
@@ -201,7 +203,9 @@ class DownloadRepository(private val context: Context) {
                     )
                 )
                 cleanup(tempAudioFile, artworkFile, convertedFile)
-                return@withContext conversionResult
+                return@withContext Result.failure(
+                    conversionResult.exceptionOrNull() ?: Exception("Error en conversión")
+                )
             }
 
             // Paso 5: Insertar metadatos
