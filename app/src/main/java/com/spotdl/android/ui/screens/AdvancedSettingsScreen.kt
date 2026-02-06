@@ -239,7 +239,7 @@ fun AudioSettings() {
         var quality by remember { mutableStateOf(320f) }
         var embedMetadata by remember { mutableStateOf(true) }
         var embedArtwork by remember { mutableStateOf(true) }
-        var normalizAudio by remember { mutableStateOf(false) }
+        var normalizeAudio by remember { mutableStateOf(false) }
 
         SettingSelector(
             label = "Formato de Audio",

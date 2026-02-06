@@ -30,7 +30,7 @@ fun MainScreen(viewModel: MainViewModel) {
         },
         bottomBar = {
             NavigationBar(
-                containerColor = MaterialTheme.colorScheme.surfaceContainer
+                containerColor = MaterialTheme.colorScheme.surface
             ) {
                 NavigationBarItem(
                     icon = { Icon(Icons.Default.Search, "Buscar") },

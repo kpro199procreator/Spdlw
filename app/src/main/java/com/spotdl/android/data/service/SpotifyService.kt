@@ -254,8 +254,7 @@ class SpotifyService {
             spotifyUrl = this.externalUrls.spotify,
             duration = this.durationMs / 1000,
             year = this.album.releaseDate.take(4),
-            genre = null, // Requiere endpoint adicional
-            isExplicit = this.isExplicit
+            genre = null // Requiere endpoint adicional
         )
     }
 }
