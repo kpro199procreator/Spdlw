@@ -471,9 +471,15 @@ class TerminalState {
 
         addMessage(TerminalMessage(content = "Initializing download...", type = MessageType.INFO))
         delay(300)
+        
+        // Aquí se conectaría con el ViewModel/Repository para descarga real
+        // Por ahora simulamos el proceso
         addMessage(TerminalMessage(content = "Fetching metadata from $url", type = MessageType.INFO))
         delay(500)
+        addMessage(TerminalMessage(content = "Searching on YouTube...", type = MessageType.INFO))
+        delay(500)
         addMessage(TerminalMessage(content = "Download started - Track added to queue", type = MessageType.SUCCESS))
+        addMessage(TerminalMessage(content = "Check Downloads tab for progress", type = MessageType.INFO))
     }
 
     private suspend fun processSearch(command: String) {

@@ -263,6 +263,106 @@ class FFmpegService(private val context: Context) {
     suspend fun getVersion(): String? {
         return binaryManager.getFFmpegVersion()
     }
+
+    /**
+     * Convertir audio con String para formato y calidad (sobrecarga)
+     */
+    suspend fun convertAudio(
+        inputFile: File,
+        outputFile: File,
+        format: String,
+        quality: Int,
+        onProgress: (Float) -> Unit = {}
+    ): Result<File> {
+        // Convertir String a enums
+        val audioFormat = when (format.uppercase()) {
+            "MP3" -> AudioFormat.MP3
+            "M4A" -> AudioFormat.M4A
+            "FLAC" -> AudioFormat.FLAC
+            "OGG" -> AudioFormat.OGG
+            "WAV" -> AudioFormat.WAV
+            else -> AudioFormat.MP3
+        }
+        
+        val audioQuality = when {
+            quality >= 320 -> AudioQuality.VERY_HIGH
+            quality >= 256 -> AudioQuality.HIGH
+            quality >= 192 -> AudioQuality.MEDIUM
+            else -> AudioQuality.LOW
+        }
+        
+        return convertAudio(inputFile, outputFile, audioFormat, audioQuality, onProgress)
+    }
+
+    /**
+     * Incrustar metadatos en archivo de audio
+     */
+    suspend fun embedMetadata(
+        file: File,
+        title: String,
+        artist: String,
+        album: String? = null,
+        year: String? = null
+    ): Result<Unit> = withContext(Dispatchers.IO) {
+        try {
+            if (!file.exists()) {
+                return@withContext Result.failure(Exception("Archivo no existe"))
+            }
+
+            val ffmpegBinary = binaryManager.getFFmpegBinary()
+            if (!ffmpegBinary.exists()) {
+                return@withContext Result.failure(Exception("FFmpeg no está instalado"))
+            }
+
+            // Crear archivo temporal para output
+            val tempFile = File(file.parentFile, "${file.nameWithoutExtension}_temp.${file.extension}")
+
+            // Construir comando para metadatos
+            val metadataArgs = mutableListOf(
+                "-metadata", "title=$title",
+                "-metadata", "artist=$artist"
+            )
+            
+            if (album != null) {
+                metadataArgs.addAll(listOf("-metadata", "album=$album"))
+            }
+            
+            if (year != null) {
+                metadataArgs.addAll(listOf("-metadata", "date=$year"))
+            }
+
+            val command = listOf(
+                ffmpegBinary.absolutePath,
+                "-i", file.absolutePath,
+                *metadataArgs.toTypedArray(),
+                "-codec", "copy", // Copiar sin re-encodear
+                tempFile.absolutePath,
+                "-y" // Sobrescribir
+            )
+
+            Log.d(TAG, "Comando metadatos: ${command.joinToString(" ")}")
+
+            val process = ProcessBuilder(command)
+                .redirectErrorStream(true)
+                .start()
+
+            val exitCode = process.waitFor()
+
+            if (exitCode == 0 && tempFile.exists()) {
+                // Reemplazar archivo original con el que tiene metadatos
+                file.delete()
+                tempFile.renameTo(file)
+                Log.d(TAG, "Metadatos incrustados exitosamente")
+                Result.success(Unit)
+            } else {
+                tempFile.delete()
+                Result.failure(Exception("Error incrustando metadatos (código: $exitCode)"))
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error en embedMetadata: ${e.message}", e)
+            Result.failure(e)
+        }
+    }
 }
 
 /**
